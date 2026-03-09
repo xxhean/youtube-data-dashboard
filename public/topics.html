@@ -11,12 +11,21 @@
 
 <body>
     <div class="container">
-        <header>
+        <header class="main-header">
             <nav class="nav-tabs">
-                <a href="/">📹 Video Ranking</a>
-                <a href="/channels.html">📺 Channel Ranking</a>
-                <a href="/topics.html" class="active">🏷️ Topic Ranking</a>
+                <a href="/" data-i18n="nav_video">📹 Video Ranking</a>
+                <a href="/channels.html" data-i18n="nav_channel">📺 Channel Ranking</a>
+                <a href="/topics.html" class="active" data-i18n="nav_topic">🏷️ Topic Ranking</a>
             </nav>
+            <div class="header-actions">
+                <select id="lang-switcher" class="lang-select">
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                </select>
+                <div class="auth-buttons">
+                    <button class="btn btn-primary" data-i18n="btn_login_register">Login / Register</button>
+                </div>
+            </div>
         </header>
 
         <main>
@@ -29,13 +38,13 @@
                 <table id="topics-table">
                     <thead>
                         <tr>
-                            <th style="width: 50px">#</th>
-                            <th style="width: 140px">Thumbnail</th>
-                            <th>Title</th>
-                            <th>Publish Date</th>
-                            <th>Channel</th>
-                            <th>Views</th>
-                            <th>Type</th>
+                            <th style="width: 50px" data-i18n="th_rank">#</th>
+                            <th style="width: 140px" data-i18n="th_thumb">Thumbnail</th>
+                            <th data-i18n="th_title">Title</th>
+                            <th data-i18n="th_date">Publish Date</th>
+                            <th data-i18n="th_channel">Channel</th>
+                            <th data-i18n="th_views">Views</th>
+                            <th data-i18n="th_type">Type</th>
                         </tr>
                     </thead>
                     <tbody id="table-body">
