@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Channel Ranking - YouTube Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <nav class="nav-tabs">
+                <a href="/">📹 Video Ranking</a>
+                <a href="/channels.html" class="active">📺 Channel Ranking</a>
+                <a href="/topics.html">🏷️ Topic Ranking</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <span class="filter-label">Metric:</span>
+                    <div class="toggle-group" id="metric-filters">
+                        <button class="toggle-btn active" data-metric="views">Views</button>
+                        <button class="toggle-btn" data-metric="subscribers">Subscribers</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <span class="filter-label">Ranking Type:</span>
+                    <div class="toggle-group" id="type-filters">
+                        <button class="toggle-btn active" data-type="total">Total</button>
+                        <button class="toggle-btn" data-type="growth">Growth</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table id="channels-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px">Rank ⇕</th>
+                            <th>Channel ⇕</th>
+                            <th>Videos ⇕</th>
+                            <th>Subs ⇕</th>
+                            <th>Total Views ⇕</th>
+                            <th>Daily Views ⇕</th>
+                            <th>Daily Subs ⇕</th>
+                            <th>Country ⇕</th>
+                            <th style="width: 300px">Latest Videos</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Content rendered by js -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination-container">
+                <!-- Pagination rendered by js -->
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/channels.js"></script>
+</body>
+
+</html>

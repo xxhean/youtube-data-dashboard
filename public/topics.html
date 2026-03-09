@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Topic Ranking - YouTube Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <nav class="nav-tabs">
+                <a href="/">📹 Video Ranking</a>
+                <a href="/channels.html">📺 Channel Ranking</a>
+                <a href="/topics.html" class="active">🏷️ Topic Ranking</a>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Topics Row -->
+            <div class="topics-row" id="topics-container">
+                <!-- Topics rendered by js -->
+            </div>
+
+            <div class="table-container">
+                <table id="topics-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px">#</th>
+                            <th style="width: 140px">Thumbnail</th>
+                            <th>Title</th>
+                            <th>Publish Date</th>
+                            <th>Channel</th>
+                            <th>Views</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Content rendered by js -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination-container">
+                <!-- Pagination rendered by js -->
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/common.js"></script>
+    <script src="/js/topics.js"></script>
+</body>
+
+</html>
