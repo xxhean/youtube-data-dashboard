@@ -53,8 +53,12 @@ function renderTable(videos, offsetIndex) {
             ? `<img src="${v.channel_avatar_url}" class="channel-avatar" alt="A">`
             : `<div class="channel-avatar"></div>`;
 
+        const highlightStyle = v.is_highlighted === 2
+            ? 'background: #FEE2E2' // FOLLOW = red/pink
+            : (v.is_highlighted === 1 ? 'background: #FEF9C3' : ''); // x = yellow
+
         return `
-            <tr style="${v.is_highlighted ? 'background: #FEF9C3' : ''}">
+            <tr style="${highlightStyle}">
                 <td class="text-muted">${offsetIndex + index + 1}</td>
                 <td>
                     <img src="${v.thumbnail_url || 'https://via.placeholder.com/120x68?text=No+Image'}" alt="Thumbnail" class="thumbnail">

@@ -2,7 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dbPath = path.resolve(__dirname, '../../data');
+const dbPath = path.resolve(__dirname, '../data');
 if (!fs.existsSync(dbPath)) {
     fs.mkdirSync(dbPath, { recursive: true });
 }
@@ -10,7 +10,30 @@ if (!fs.existsSync(dbPath)) {
 // Connect to SQLite DB
 const db = new Database(path.join(dbPath, 'database.sqlite'));
 
-// Create Tables
+// Enable WAL mode for better concurrent performance
+db.pragma('journal_mode = WAL');
+
+// ==========================================
+// raw_videos: 原始数据暂存表 (N8N 推送数据直接写入)
+// 处理完成后数据会被清除
+// ==========================================
+db.prepare(`
+    CREATE TABLE IF NOT EXISTS raw_videos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        video_url TEXT,
+        title TEXT,
+        view_count INTEGER DEFAULT 0,
+        account TEXT,
+        publish_date TEXT,
+        scrape_date TEXT,
+        focus TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+`).run();
+
+// ==========================================
+// videos: 处理后的视频数据 (从 raw_videos 加工得来)
+// ==========================================
 db.prepare(`
     CREATE TABLE IF NOT EXISTS videos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,23 +54,9 @@ db.prepare(`
     )
 `).run();
 
-db.prepare(`
-    CREATE TABLE IF NOT EXISTS channels (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        channel_name TEXT UNIQUE,
-        channel_url TEXT,
-        avatar_url TEXT,
-        subscriber_count INTEGER DEFAULT 0,
-        total_views BIGINT DEFAULT 0,
-        video_count INTEGER DEFAULT 0,
-        daily_views INTEGER DEFAULT 0,
-        daily_subs INTEGER DEFAULT 0,
-        country TEXT,
-        joined_date TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-`).run();
-
+// ==========================================
+// topics: 主题/关键词 (从视频标题 #hashtag 自动提取)
+// ==========================================
 db.prepare(`
     CREATE TABLE IF NOT EXISTS topics (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,6 +66,9 @@ db.prepare(`
     )
 `).run();
 
+// ==========================================
+// view_history: 播放量变化追踪
+// ==========================================
 db.prepare(`
     CREATE TABLE IF NOT EXISTS view_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

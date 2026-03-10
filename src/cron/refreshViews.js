@@ -34,7 +34,7 @@ if (!API_KEY) {
         return null;
     }
 
-    // Refresh function
+    // Refresh function - updates videos table (display data) directly
     async function refreshViews() {
         console.log(`[${new Date().toISOString()}] Starting YouTube views auto-refresh...`);
 
