@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 
 // GET /api/channels - Aggregate channel data from videos table
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const {
             page = 1,
@@ -19,34 +19,39 @@ router.get('/', (req, res) => {
         const actualSort = allowedSorts.includes(sort) ? sort : 'total_views';
         const actualOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-        const countStmt = db.prepare(
-            `SELECT COUNT(*) as total FROM (SELECT DISTINCT channel_name FROM videos WHERE channel_name != '')`
-        );
-        const total = countStmt.get().total;
+        const countQuery = `SELECT COUNT(*) as total FROM (SELECT DISTINCT channel_name FROM videos WHERE channel_name != '' AND channel_name IS NOT NULL) AS sub`;
+        const countResult = await db.query(countQuery);
+        const total = parseInt(countResult.rows[0].total);
 
-        const stmt = db.prepare(`
+        const channelsResult = await db.query(`
             SELECT 
                 channel_name,
                 COUNT(*) as video_count,
                 SUM(view_count) as total_views,
                 MAX(collect_date) as updated_at
             FROM videos
-            WHERE channel_name != ''
+            WHERE channel_name != '' AND channel_name IS NOT NULL
             GROUP BY channel_name
             ORDER BY ${actualSort} ${actualOrder}
-            LIMIT ? OFFSET ?
-        `);
-        const channels = stmt.all(Number(limit), Number(offset));
+            LIMIT $1 OFFSET $2
+        `, [Number(limit), Number(offset)]);
+        
+        const channels = channelsResult.rows.map(c => ({
+            ...c, 
+            video_count: parseInt(c.video_count), 
+            total_views: parseInt(c.total_views)
+        }));
 
         // Get latest 3 videos for each channel to display in UI
         for (let channel of channels) {
-            channel.latest_videos = db.prepare(`
+            const latestVideosResult = await db.query(`
                 SELECT thumbnail_url, title, video_url 
                 FROM videos 
-                WHERE channel_name = ? 
+                WHERE channel_name = $1 
                 ORDER BY publish_date DESC, id DESC 
                 LIMIT 3
-            `).all(channel.channel_name);
+            `, [channel.channel_name]);
+            channel.latest_videos = latestVideosResult.rows;
         }
 
         res.json({

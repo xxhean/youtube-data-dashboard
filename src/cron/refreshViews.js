@@ -40,16 +40,12 @@ if (!API_KEY) {
 
         try {
             // Get all videos
-            const videosStmt = db.prepare('SELECT id, video_url FROM videos');
-            const allVideos = videosStmt.all();
+            const allVideos = (await db.query('SELECT id, video_url FROM videos')).rows;
 
             if (allVideos.length === 0) {
                 console.log('No videos to refresh.');
                 return;
             }
-
-            const updateCountStmt = db.prepare('UPDATE videos SET view_count = ? WHERE id = ?');
-            const insertHistoryStmt = db.prepare('INSERT INTO view_history (video_id, view_count) VALUES (?, ?)');
 
             for (let i = 0; i < allVideos.length; i += BATCH_SIZE) {
                 const batch = allVideos.slice(i, i + BATCH_SIZE);
@@ -70,22 +66,28 @@ if (!API_KEY) {
 
                 const apiItems = response.data.items || [];
 
-                db.transaction(() => {
+                const client = await db.getClient();
+                try {
+                    await client.query('BEGIN');
                     let updated = 0;
                     for (const item of apiItems) {
                         const count = parseInt(item.statistics.viewCount, 10);
                         const dbId = videoMap[item.id];
 
                         if (dbId && !isNaN(count)) {
-                            // Only update if count has changed? 
-                            // Let's just update and log history
-                            updateCountStmt.run(count, dbId);
-                            insertHistoryStmt.run(dbId, count);
+                            await client.query('UPDATE videos SET view_count = $1 WHERE id = $2', [count, dbId]);
+                            await client.query('INSERT INTO view_history (video_id, view_count) VALUES ($1, $2)', [dbId, count]);
                             updated++;
                         }
                     }
+                    await client.query('COMMIT');
                     console.log(`Processed batch ${Math.floor(i / BATCH_SIZE) + 1}. Updated ${updated} videos.`);
-                })();
+                } catch (e) {
+                    await client.query('ROLLBACK');
+                    console.error('Error in batch transaction:', e);
+                } finally {
+                    client.release();
+                }
             }
 
             console.log(`[${new Date().toISOString()}] Refresh completed.`);

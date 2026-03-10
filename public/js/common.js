@@ -143,8 +143,51 @@ function applyTranslations() {
     if (switcher) switcher.value = currentLang;
 }
 
+async function checkAuthStatus() {
+    try {
+        const response = await fetch('/auth/me');
+        const data = await response.json();
+        
+        const authContainer = document.querySelector('.auth-buttons');
+        if (!authContainer) return;
+
+        if (data.success && data.user) {
+            // Logged in
+            const user = data.user;
+            authContainer.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <img src="${user.avatar_url}" alt="Avatar" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #E5E7EB;">
+                    <span style="font-weight: 500; font-size: 0.9rem;">${user.display_name}</span>
+                    <a href="/auth/logout" class="btn btn-outline" style="padding: 0.25rem 0.75rem; font-size: 0.8rem; margin-left: 0.5rem;">Log out</a>
+                </div>
+            `;
+        } else {
+            // Not logged in
+            authContainer.innerHTML = `
+                <a href="/auth/google" class="btn btn-primary" style="display: flex; align-items: center; gap: 0.5rem; text-decoration: none;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22.56 12.25C22.56 11.47 22.49 10.72 22.36 10H12V14.26H17.92C17.66 15.63 16.88 16.79 15.71 17.57V20.34H19.28C21.36 18.42 22.56 15.59 22.56 12.25Z" fill="#4285F4"/>
+                        <path d="M12 23C14.97 23 17.46 22.01 19.28 20.34L15.71 17.57C14.72 18.23 13.47 18.63 12 18.63C9.15 18.63 6.74 16.71 5.88 14.13H2.21V16.98C4.01 20.55 7.72 23 12 23Z" fill="#34A853"/>
+                        <path d="M5.88 14.13C5.66 13.47 5.53 12.75 5.53 12C5.53 11.25 5.66 10.53 5.88 9.87V7.02H2.21C1.47 8.5 1.04 10.19 1.04 12C1.04 13.81 1.47 15.5 2.21 16.98L5.88 14.13Z" fill="#FBBC05"/>
+                        <path d="M12 5.38C13.62 5.38 15.07 5.94 16.22 7.03L19.36 3.89C17.46 2.12 14.97 1.04 12 1.04C7.72 1.04 4.01 3.45 2.21 7.02L5.88 9.87C6.74 7.29 9.15 5.38 12 5.38Z" fill="#EA4335"/>
+                    </svg>
+                    <span data-i18n="btn_login_register">${currentLang === 'zh' ? 'Google 一键登录' : 'Continue with Google'}</span>
+                </a>
+            `;
+        }
+    } catch (e) {
+        console.error('Failed to check auth status', e);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Override the generic translations for login if zh
+    if (translations.zh) {
+        translations.zh.btn_login_register = 'Google 一键登录';
+    }
+    
     applyTranslations();
+    checkAuthStatus();
 
     const switcher = document.getElementById('lang-switcher');
     if (switcher) {
@@ -152,8 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentLang = e.target.value;
             localStorage.setItem('appLang', currentLang);
             applyTranslations();
-            // Optional: trigger re-render if sort arrows are affected, 
-            // but for now reloading the page is the easiest way to ensure JS states refresh too
+            // Reload the page to ensure JS states and auth UI refresh too
             window.location.reload();
         });
     }

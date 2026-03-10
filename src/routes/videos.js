@@ -11,7 +11,7 @@ const getToday = () => {
 };
 
 // GET /api/videos - Query videos with pagination and filters
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const {
             page = 1,
@@ -29,44 +29,47 @@ router.get('/', (req, res) => {
         const params = [];
 
         if (video_type && (video_type === 'short' || video_type === 'regular')) {
-            query += ' AND video_type = ?';
             params.push(video_type);
+            query += ` AND video_type = $${params.length}`;
         }
 
         if (date_range === 'week') {
-            query += " AND publish_date >= date('now', '-7 days')";
+            query += " AND publish_date >= (CURRENT_DATE - INTERVAL '7 days')::text";
         } else if (date_range === 'month') {
-            query += " AND publish_date >= date('now', '-30 days')";
+            query += " AND publish_date >= (CURRENT_DATE - INTERVAL '30 days')::text";
         }
 
         if (keyword) {
-            query += ' AND (title LIKE ? OR keyword LIKE ?)';
             params.push(`%${keyword}%`);
-            params.push(`%${keyword}%`);
+            query += ` AND (title ILIKE $${params.length} OR keyword ILIKE $${params.length})`;
         }
 
         if (channel) {
-            query += ' AND channel_name = ?';
             params.push(channel);
+            query += ` AND channel_name = $${params.length}`;
         }
+
+        const countQuery = `SELECT COUNT(*) as total FROM (${query}) AS sub`;
+        const totalResult = await db.query(countQuery, params);
+        const total = parseInt(totalResult.rows[0].total);
 
         // Add sorting properly to prevent SQL injection
         const allowedSortCols = ['view_count', 'publish_date', 'id'];
         const actualSort = allowedSortCols.includes(sort) ? sort : 'view_count';
         const actualOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-        const countStmt = db.prepare(`SELECT COUNT(*) as total FROM (${query})`);
-        const total = countStmt.get(...params).total;
+        params.push(Number(limit));
+        const limitIdx = params.length;
+        params.push(Number(offset));
+        const offsetIdx = params.length;
 
-        query += ` ORDER BY ${actualSort} ${actualOrder} LIMIT ? OFFSET ?`;
-        params.push(Number(limit), Number(offset));
+        query += ` ORDER BY ${actualSort} ${actualOrder} LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
 
-        const stmt = db.prepare(query);
-        const videos = stmt.all(...params);
+        const videosResult = await db.query(query, params);
 
         res.json({
             success: true,
-            data: videos,
+            data: videosResult.rows,
             pagination: {
                 total,
                 page: Number(page),
@@ -81,24 +84,21 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/videos - Push raw video data (requires API key)
-// Accepts N8N raw format: { video_url, title, views, account, publish_date, scrape_date, focus }
-// Data flows: raw_videos → process → videos/topics → clear raw_videos
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
     try {
         let items = req.body;
         if (!Array.isArray(items)) {
             items = [items];
         }
 
-        // Insert into raw_videos staging table
-        const insertRaw = db.prepare(`
-            INSERT INTO raw_videos (video_url, title, view_count, account, publish_date, scrape_date, focus)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const insertTransaction = db.transaction((videos) => {
-            for (const v of videos) {
-                insertRaw.run(
+        const client = await db.getClient();
+        try {
+            await client.query('BEGIN');
+            for (const v of items) {
+                await client.query(`
+                    INSERT INTO raw_videos (video_url, title, view_count, account, publish_date, scrape_date, focus)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                `, [
                     v.video_url || '',
                     v.title || '',
                     v.views || v.view_count || 0,
@@ -106,14 +106,18 @@ router.post('/', authMiddleware, (req, res) => {
                     v.publish_date || '',
                     v.scrape_date || v.collect_date || getToday(),
                     v.focus || ''
-                );
+                ]);
             }
-        });
-
-        insertTransaction(items);
+            await client.query('COMMIT');
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
 
         // Process raw data → videos/topics, then clear raw_videos
-        const result = processRawData();
+        const result = await processRawData();
 
         res.json({
             success: true,
@@ -127,30 +131,31 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // GET /api/videos/stats - Statistics
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
     try {
-        const totalVideos = db.prepare('SELECT COUNT(*) as count FROM videos').get().count;
-        const totalViews = db.prepare('SELECT SUM(view_count) as total FROM videos').get().total || 0;
+        const totalVideos = parseInt((await db.query('SELECT COUNT(*) as count FROM videos')).rows[0].count);
+        const totalViewsResult = await db.query('SELECT SUM(view_count) as total FROM videos');
+        const totalViews = parseInt(totalViewsResult.rows[0].total) || 0;
 
-        const topChannels = db.prepare(`
+        const topChannels = (await db.query(`
             SELECT channel_name, COUNT(*) as count, SUM(view_count) as total_views 
             FROM videos 
-            WHERE channel_name != ''
+            WHERE channel_name != '' AND channel_name IS NOT NULL
             GROUP BY channel_name 
             ORDER BY total_views DESC 
             LIMIT 5
-        `).all();
+        `)).rows;
 
         const today = getToday();
-        const todayAdded = db.prepare(`SELECT COUNT(*) as count FROM videos WHERE date(created_at) = ?`).get(today).count;
-        const highlightedCount = db.prepare('SELECT COUNT(*) as count FROM videos WHERE is_highlighted > 0').get().count;
+        const todayAdded = parseInt((await db.query(`SELECT COUNT(*) as count FROM videos WHERE DATE(created_at) = $1::date`, [today])).rows[0].count);
+        const highlightedCount = parseInt((await db.query('SELECT COUNT(*) as count FROM videos WHERE is_highlighted > 0')).rows[0].count);
 
         res.json({
             success: true,
             data: {
                 total_videos: totalVideos,
                 total_views: totalViews,
-                top_channels: topChannels,
+                top_channels: topChannels.map(c => ({...c, count: parseInt(c.count), total_views: parseInt(c.total_views)})),
                 today_added: todayAdded,
                 highlighted_count: highlightedCount
             }

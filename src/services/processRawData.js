@@ -65,34 +65,17 @@ function decodeAccount(account) {
  * 5. Record view_history
  * 6. Clear raw_videos
  */
-function processRawData() {
-    const rawVideos = db.prepare('SELECT * FROM raw_videos').all();
+async function processRawData() {
+    const rawVideos = (await db.query('SELECT * FROM raw_videos')).rows;
     if (rawVideos.length === 0) return { processed: 0, inserted: 0, updated: 0 };
 
     let inserted = 0;
     let updated = 0;
 
-    const upsertVideo = db.prepare(`
-        INSERT INTO videos (
-            video_url, title, thumbnail_url, view_count, video_type,
-            channel_name, publish_date, collect_date, keyword, is_highlighted
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(video_url) DO UPDATE SET
-            title = excluded.title,
-            thumbnail_url = excluded.thumbnail_url,
-            view_count = excluded.view_count,
-            collect_date = excluded.collect_date,
-            keyword = excluded.keyword,
-            is_highlighted = excluded.is_highlighted
-    `);
+    const client = await db.getClient();
+    try {
+        await client.query('BEGIN');
 
-    const insertTopic = db.prepare('INSERT OR IGNORE INTO topics (name) VALUES (?)');
-
-    const historyStmt = db.prepare(
-        'INSERT INTO view_history (video_id, view_count) VALUES (?, ?)'
-    );
-
-    const transaction = db.transaction(() => {
         for (const raw of rawVideos) {
             // 1. Decode account → channel_name
             const channelName = decodeAccount(raw.account);
@@ -132,12 +115,23 @@ function processRawData() {
             }
 
             // 6. Check existing for history tracking
-            const existing = db.prepare(
-                'SELECT id, view_count FROM videos WHERE video_url = ?'
-            ).get(videoUrl);
+            const existingResult = await client.query('SELECT id, view_count FROM videos WHERE video_url = $1', [videoUrl]);
+            const existing = existingResult.rows[0];
 
             // 7. Upsert into videos
-            upsertVideo.run(
+            await client.query(`
+                INSERT INTO videos (
+                    video_url, title, thumbnail_url, view_count, video_type,
+                    channel_name, publish_date, collect_date, keyword, is_highlighted
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT(video_url) DO UPDATE SET
+                    title = excluded.title,
+                    thumbnail_url = excluded.thumbnail_url,
+                    view_count = excluded.view_count,
+                    collect_date = excluded.collect_date,
+                    keyword = excluded.keyword,
+                    is_highlighted = excluded.is_highlighted
+            `, [
                 videoUrl,
                 raw.title || '',
                 thumbnailUrl,
@@ -148,36 +142,39 @@ function processRawData() {
                 raw.scrape_date || '',
                 keyword,
                 isHighlighted
-            );
+            ]);
 
             if (existing) {
                 updated++;
                 if (raw.view_count && raw.view_count !== existing.view_count) {
-                    historyStmt.run(existing.id, raw.view_count);
+                    await client.query('INSERT INTO view_history (video_id, view_count) VALUES ($1, $2)', [existing.id, raw.view_count]);
                 }
             } else {
                 inserted++;
                 if (raw.view_count) {
-                    const newVideo = db.prepare(
-                        'SELECT id FROM videos WHERE video_url = ?'
-                    ).get(videoUrl);
+                    const newVideo = (await client.query('SELECT id FROM videos WHERE video_url = $1', [videoUrl])).rows[0];
                     if (newVideo) {
-                        historyStmt.run(newVideo.id, raw.view_count);
+                        await client.query('INSERT INTO view_history (video_id, view_count) VALUES ($1, $2)', [newVideo.id, raw.view_count]);
                     }
                 }
             }
 
             // 8. Insert topics from hashtags
             for (const tag of hashtags) {
-                insertTopic.run(tag);
+                await client.query('INSERT INTO topics (name) VALUES ($1) ON CONFLICT(name) DO NOTHING', [tag]);
             }
         }
 
         // 9. Clear raw_videos after processing
-        db.prepare('DELETE FROM raw_videos').run();
-    });
-
-    transaction();
+        await client.query('DELETE FROM raw_videos');
+        await client.query('COMMIT');
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('Error in processRawData transaction:', e);
+        throw e;
+    } finally {
+        client.release();
+    }
 
     console.log(`[processRawData] Processed ${rawVideos.length} raw records → ${inserted} new, ${updated} updated`);
     return { processed: rawVideos.length, inserted, updated };
