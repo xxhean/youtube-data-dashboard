@@ -4,17 +4,24 @@ const passport = require('passport');
 const db = require('../db');
 
 // GET /auth/google — 发起 Google 登录
-router.get('/google', passport.authenticate('google', {
-    scope: ['profile', 'email']
-}));
+router.get('/google', (req, res, next) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+        return res.status(503).send('Google OAuth 尚未配置 / Google OAuth is not configured yet. Please check your .env file.');
+    }
+    passport.authenticate('google', {
+        scope: ['profile', 'email']
+    })(req, res, next);
+});
 
 // GET /auth/google/callback — Google 回调
-router.get('/google/callback',
-    passport.authenticate('google', { failureRedirect: '/?login=failed' }),
-    (req, res) => {
-        res.redirect('/?login=success');
+router.get('/google/callback', (req, res, next) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+        return res.redirect('/?login=failed');
     }
-);
+    passport.authenticate('google', { failureRedirect: '/?login=failed' })(req, res, next);
+}, (req, res) => {
+    res.redirect('/?login=success');
+});
 
 // GET /auth/me — 获取当前登录用户信息
 router.get('/me', (req, res) => {
